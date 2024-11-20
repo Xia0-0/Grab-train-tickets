@@ -1,59 +1,121 @@
-# 导入需要的库
-import requests  # 用于发送HTTP请求，获取网页数据
-from PIL import Image  # 用于处理图像，尤其是验证码图片
-import pytesseract  # 用于图像文字识别（OCR），主要用来识别验证码
-from io import BytesIO  # 用于处理字节数据，转换为图像
-from selenium import webdriver  # 用于自动化浏览器操作
-import time  # 用于控制程序暂停时间，模拟用户等待时间
+import requests  # 用于发送 HTTP 请求
+import time  # 用于设置等待时间
+from PIL import Image  # 用于处理二维码图片
+from io import BytesIO  # 用于将二进制数据转换为文件流
+from selenium import webdriver  # 使用 Selenium 控制浏览器操作
+from selenium.webdriver.chrome.service import Service  # 导入 Service
+from selenium.common.exceptions import NoSuchElementException, WebDriverException
 
 
-#模拟登录
+
+##登录模块
 class TicketBot:
-    def __init__(self, username, password):
-        self.username = username
-        self.password = password
+    def __init__(self, driver_path, qr_code_url, check_login_url):
+        """
+        初始化抢票机器人
+        :param driver_path: ChromeDriver 的路径
+        :param qr_code_url: 获取二维码的接口 URL
+        :param check_login_url: 检查登录状态的接口 URL
+        """
+        self.driver_path = driver_path
+        self.qr_code_url = qr_code_url
+        self.check_login_url = check_login_url
         self.session = requests.Session()
-        self.driver = webdriver.Chrome()  # 使用 Chrome 浏览器
-        self.login_url = "https://kyfw.12306.cn/otn/login/init"
-        self.login_page_url = "https://kyfw.12306.cn/otn/leftTicket/init"
+        self.driver = None
 
-    def login(self):
-        # 打开 12306 登录页面
-        self.driver.get(self.login_url)
-        time.sleep(3)
+    def setup_driver(self):
+        """初始化浏览器驱动"""
+        try:
+            service = Service(executable_path=self.driver_path)
+            self.driver = webdriver.Chrome(service=service)
+            print("浏览器启动成功！")
+        except WebDriverException as e:
+            print(f"浏览器启动失败：{e}")
+            raise
 
-        # 获取验证码图片
-        captcha_img = self.driver.find_element_by_xpath("//img[@id='J-login-img']")
-        captcha_url = captcha_img.get_attribute('src')
-        captcha_data = self.get_captcha(captcha_url)
+    def login_by_qrcode(self):
+        """通过扫码登录"""
+        try:
+            # 打开登录页面
+            self.driver.get("https://kyfw.12306.cn/otn/resources/login.html")
+            time.sleep(3)
 
-        # 识别验证码
-        captcha_text = self.recognize_captcha(captcha_data)
-        print(f"验证码识别结果：{captcha_text}")
+            # 定位并获取二维码图片
+            qr_code_img = self.driver.find_element("id", "J-login-img")
+            qr_code_url = qr_code_img.get_attribute("src")
+            qr_code_data = self.get_qrcode(qr_code_url)
 
-        # 输入账号、密码和验证码
-        self.driver.find_element_by_id("J-userName").send_keys(self.username)
-        self.driver.find_element_by_id("J-password").send_keys(self.password)
-        self.driver.find_element_by_id("J-captcha").send_keys(captcha_text)
-        
-        # 点击登录
-        self.driver.find_element_by_id("J-login").click()
-        time.sleep(5)
+            # 展示二维码图片
+            qr_code_data.show()
+            print("请使用 12306 APP 扫描二维码登录...")
 
-        print("登录成功！")
+            # 检查登录状态
+            self.wait_for_login()
+        except NoSuchElementException as e:
+            print(f"元素定位失败：{e}")
+        except Exception as e:
+            print(f"扫码登录过程中出现错误：{e}")
 
-    def get_captcha(self, url):
-        response = self.session.get(url)
-        return Image.open(BytesIO(response.content))
+    def get_qrcode(self, qr_code_url):
+        """
+        下载二维码图片
+        :param qr_code_url: 二维码的 URL
+        :return: PIL.Image 对象
+        """
+        try:
+            response = self.session.get(qr_code_url, timeout=10)
+            response.raise_for_status()  # 检查 HTTP 状态码
+            return Image.open(BytesIO(response.content))
+        except requests.RequestException as e:
+            print(f"下载二维码图片失败：{e}")
+            raise
 
-    def recognize_captcha(self, captcha_img):
-        # 使用 pytesseract 识别验证码
-        return pytesseract.image_to_string(captcha_img, config='--psm 6')
+    def wait_for_login(self):
+        """等待用户扫码并登录"""
+        while True:
+            time.sleep(5)  # 每隔5秒检查一次
+            try:
+                if self.check_login_status():
+                    print("登录成功！")
+                    break
+                else:
+                    print("等待扫码或确认登录...")
+            except Exception as e:
+                print(f"检查登录状态时出现错误：{e}")
+                break
+
+    def check_login_status(self):
+        """
+        检查登录状态
+        :return: bool
+        """
+        try:
+            response = self.session.post(self.check_login_url, timeout=10)
+            response.raise_for_status()  # 检查 HTTP 状态码
+            result = response.json()
+            return result.get("status") == "success"
+        except requests.RequestException as e:
+            print(f"检查登录状态失败：{e}")
+            return False
 
     def close(self):
-        self.driver.quit()
+        """关闭浏览器并释放资源"""
+        if self.driver:
+            self.driver.quit()
+            print("浏览器已关闭。")
 
-# 实例化并登录
-bot = TicketBot('your_username', 'your_password')
-bot.login()
-bot.close()
+# 配置参数
+CHROMEDRIVER_PATH = r'C:\Users\asus\Desktop\Grab-train-tickets\chromedriver-win64\chromedriver-win64\chromedriver.exe'
+QR_CODE_URL = "https://kyfw.12306.cn/otn/login/conf"
+CHECK_LOGIN_URL = "https://kyfw.12306.cn/otn/login/check"
+
+# 主程序
+if __name__ == "__main__":
+    bot = TicketBot(CHROMEDRIVER_PATH, QR_CODE_URL, CHECK_LOGIN_URL)
+    try:
+        bot.setup_driver()
+        bot.login_by_qrcode()
+    except Exception as e:
+        print(f"程序运行过程中出错：{e}")
+    finally:
+        bot.close()
