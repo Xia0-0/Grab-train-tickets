@@ -8,8 +8,8 @@ from selenium.common.exceptions import NoSuchElementException, WebDriverExceptio
 from webdriver_manager.chrome import ChromeDriverManager  # 自动管理 ChromeDriver
 from selenium.webdriver.common.by import By
 
-
-class TicketBot:
+###登录模块
+class LoginModule:
     def __init__(self, qr_code_url, check_login_url):
         """
         初始化抢票机器人
@@ -121,3 +121,32 @@ if __name__ == "__main__":
         print(f"程序运行过程中出错：{e}")  # 捕获并输出运行过程中的异常
     finally:
         bot.close()  # 无论是否成功，都关闭浏览器并释放资源
+        
+        
+        
+    if __name__ == "__main__":
+    # 初始化各模块
+        login = LoginModule()
+        
+
+    # 登录流程
+    if login.login_by_qrcode():
+        notify.send_notification("登录成功！")
+
+        # 查询流程
+        tickets = query.search_tickets(params={"from": "北京", "to": "上海"})
+        available_tickets = query.filter_tickets(tickets, conditions={"seat": "硬卧"})
+
+        # 预订流程
+        if available_tickets:
+            result = booking.submit_order(available_tickets[0])
+            if result.get("status") == "success":
+                notify.send_notification("抢票成功！请及时支付！")
+
+                # 支付流程
+                payment_status = payment.pay_order(result["order_id"])
+                if payment_status:
+                    notify.send_notification("支付成功！")
+                else:
+                    notify.send_notification("支付失败，请重试！")
+
