@@ -10,15 +10,16 @@ class QueryModule:
         time.sleep(3)
 
         # 填写查询信息
-        self.driver.find_element_by_id("fromStationText").click()
+        self.driver.find_element_by_id("fromStationText").click() #出发站
+        # 使用 XPath 查找包含指定文本的 <li> 元素，并点击该元素
         self.driver.find_element_by_xpath(f"//li[contains(text(), '{from_station}')]").click()
         time.sleep(1)
 
-        self.driver.find_element_by_id("toStationText").click()
+        self.driver.find_element_by_id("toStationText").click() #目的站
         self.driver.find_element_by_xpath(f"//li[contains(text(), '{to_station}')]").click()
         time.sleep(1)
 
-        self.driver.find_element_by_id("train_date").send_keys(date)
+        self.driver.find_element_by_id("train_date").send_keys(date) #出发日期
         time.sleep(1)
 
         self.driver.find_element_by_id("query_ticket").click()
@@ -36,8 +37,5 @@ class QueryModule:
         return ticket_list
 
 
-    def filter_tickets(self, results, conditions):
-        # 筛选符合条件车次的代码
-        pass
-
+    
 
